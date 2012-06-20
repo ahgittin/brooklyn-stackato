@@ -6,6 +6,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import brooklyn.config.render.RendererHints;
 import brooklyn.enricher.basic.SensorPropagatingEnricher;
 import brooklyn.entity.Entity;
 import brooklyn.entity.basic.AbstractEntity;
@@ -26,6 +27,8 @@ public class StackatoDeployment extends AbstractEntity implements StackatoConfig
     public static final AttributeSensor<String> STACKATO_ENDPOINT = new BasicAttributeSensor<String>(String.class, "stackato.endpoint", "Hostname to use as endpoint (e.g. api.my1.example.com)");
     public static final AttributeSensor<String> MASTER_PUBLIC_IP = new BasicAttributeSensor<String>(String.class, "stackato.master.hostname.canonical", "Public IP of master (supplied by cloud provider)");
     public static final AttributeSensor<String> MASTER_INTERNAL_IP = new BasicAttributeSensor<String>(String.class, "stackato.master.ip.internal");
+    public static final AttributeSensor<String> STACKATO_MGMT_CONSOLE_URL = new BasicAttributeSensor<String>(String.class, "stackato.mgmt.url", "URL for management console");
+    static { RendererHints.register(STACKATO_MGMT_CONSOLE_URL, new RendererHints.NamedActionWithUrl("Open")); }
     
     private StackatoMasterNode master;
     
@@ -71,7 +74,7 @@ public class StackatoDeployment extends AbstractEntity implements StackatoConfig
 "** for:\n"+
 "**       "+getConfig(StackatoDeployment.STACKATO_CLUSTER_DOMAIN)+"\n"+
 "\n"+
-name+"   A     "+ip+"}\n"+
+name+"   A     "+ip+"\n"+
 "*."+name+" CNAME "+name+"\n"+
 "\n"+
 "*************************************************");

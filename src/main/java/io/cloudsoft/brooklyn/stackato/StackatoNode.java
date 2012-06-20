@@ -8,8 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-import org.apache.commons.lang.ArrayUtils;
-import org.jclouds.compute.options.TemplateOptions;
 import org.jclouds.domain.LoginCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -119,6 +117,8 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
     
     @Override
     protected Collection<Integer> getRequiredOpenPorts() {
+        // from stackato web site.  but arbitrary high-numbered ports are needed for internal comms
+        // (eg to access app on dea from router; otherwise you see a vcap router error)
         return Arrays.asList(80, 443, 22, 4222, 9022);
     }
     
@@ -129,6 +129,7 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
         Map flags = MutableMap.builder().
                 put("templateBuilder", template).
                 // we use default for convenience because HP cloud otherwise gets security group explosion!
+                // default should allow everything
                 put("securityGroups", Arrays.asList("default") ).
                 put("callerContext", ""+this).
                 build();
@@ -148,11 +149,15 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
     public void startInAwsUsEast(MachineProvisioningLocation location) {
         PortableTemplateBuilder template = (PortableTemplateBuilder) new PortableTemplateBuilder().
                 imageId("us-east-1/ami-f806a291").  //or:  imageNameMatches(".*stackato-v1.2.6.*")   (but slower and less reliable)
-                minRam( getConfig(MIN_RAM_MB) ).
-                options( new TemplateOptions().inboundPorts( ArrayUtils.toPrimitive(getRequiredOpenPorts().toArray(new Integer[0]))) );
+                // see security group below
+//                options( new TemplateOptions().inboundPorts( ArrayUtils.toPrimitive(getRequiredOpenPorts().toArray(new Integer[0]))) ).
+                minRam( getConfig(MIN_RAM_MB) );
         Map flags = MutableMap.builder().
                 put("templateBuilder", template).
                 put("callerContext", ""+this).
+                // we require a security group called 'default' with everything open
+                // (high-numbered ports needed for internal stackato comms; list above insufficient)
+                put("securityGroups", Arrays.asList("universal") ).
                 put("userData", "127.0.0.1").
                 put("customCredentials", LoginCredentials.builder().user("stackato").password("stackato").build()).
                 build();
@@ -234,6 +239,8 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
         
         log.info(""+this+" becoming "+join(roles, " ")+" "+join(opts, " "));
         int result = getDriver().execute(Arrays.asList(
+                // root needed by python for some roles (controller)
+                getDriver().getRefreshSudoCommand(),
                 "stackato-admin become "+join(roles, " ")+" "+join(opts, " ")
             ), ""+this+" becoming "+roles);
         if (result!=0) throw new IllegalStateException("error "+this+" becoming "+join(roles, " ")+" "+join(opts, " ")+": result code "+result);

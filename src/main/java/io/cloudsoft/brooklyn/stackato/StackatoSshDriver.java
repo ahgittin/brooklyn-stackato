@@ -23,6 +23,11 @@ public class StackatoSshDriver extends StartStopSshDriver {
         this.node = entity;
     }
 
+    String getRefreshSudoCommand() { 
+        String password = getRequiredConfig(StackatoNode.STACKATO_PASSWORD);
+        return "echo "+password+" | sudo -S whoami || exit 1";
+    }
+    
     @Override
     public boolean isRunning() {
         try {
@@ -45,18 +50,17 @@ public class StackatoSshDriver extends StartStopSshDriver {
     }
 
     public void checkMachineHealthy() {
-        String password = getRequiredConfig(StackatoNode.STACKATO_PASSWORD);
         newScript("stackato-install-check-machine-can-do-root").
             failOnNonZeroResultCode().
-            body.append("echo "+password+" | sudo -S whoami || exit 1").
-            execute();
+            body.append(getRefreshSudoCommand()).
+            execute();        
         newScript("stackato-install-check-machine-stackato-status").
             failOnNonZeroResultCode().
             body.append("stackato-admin status").
             execute();
     }
 
-    private String getRequiredConfig(ConfigKey<String> key) {
+    public String getRequiredConfig(ConfigKey<String> key) {
         String v = node.getConfig(key);
         if (v==null) throw new IllegalStateException("Missing required configuration "+key+"; set on cluster or entity");
         return v;
@@ -104,11 +108,19 @@ public class StackatoSshDriver extends StartStopSshDriver {
         log.info("Confirmed health for installaton of Stackato machine at "+getMachine()+" for "+node);
     }
     
+    public void createAdminUser(String username) {
+        newScript("stackato-create-admin-user").
+            failOnNonZeroResultCode().
+            body.append(getRefreshSudoCommand()).
+            body.append("stackato-admin admin grant "+username).
+            execute();
+    }
+    
     @Override
     public void customize() {
         node.becomeDesiredStackatoRole();
     }
-
+    
     public void rebootAndWait() {
         log.info("Rebooting machine for "+node);
         String password = getRequiredConfig(StackatoNode.STACKATO_PASSWORD);

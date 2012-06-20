@@ -18,9 +18,12 @@ public class StackatoRolloutToCloud extends AbstractApplication {
     public static final Logger log = LoggerFactory.getLogger(StackatoRolloutToCloud.class);
     
     StackatoDeployment stackato = new StackatoDeployment(this,
-        password: "stackato",
-        clusterName: "brooklyn-stackato-"+id,
-        domain: "geopaas.org"
+        cluster: "brooklyn-stackato-"+id,
+        domain: "geopaas.org",
+        admin: "me@fun.net",
+        // currently password has to be stackato, and 
+        // you have to manually log in to create a _different_ admin user
+        password: "stackato"
     );
 
     public static void main(String[] args) {
@@ -30,7 +33,7 @@ public class StackatoRolloutToCloud extends AbstractApplication {
         
         // start it, and the Brooklyn mgmt console
         StackatoRolloutToCloud app = new StackatoRolloutToCloud();
-        BrooklynLauncher.manage(app, 808);
+        BrooklynLauncher.manage(app, 8084);
         app.start([new LocationRegistry().resolve(location)]);
         
         // display info

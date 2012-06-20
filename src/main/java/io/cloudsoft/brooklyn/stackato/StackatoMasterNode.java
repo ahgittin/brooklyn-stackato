@@ -1,5 +1,6 @@
 package io.cloudsoft.brooklyn.stackato;
 
+import java.io.StringReader;
 import java.util.Arrays;
 import java.util.concurrent.Callable;
 
@@ -25,6 +26,13 @@ public class StackatoMasterNode extends StackatoNode {
         addOptionForBecomeIfNotPresent("-n", new BasicTask(new Callable() { public Object call() { 
             return getConfig(STACKATO_CLUSTER_NAME); 
         } }));
+    }
+
+    public void becomeDesiredStackatoRole() {
+        getDriver().createAdminUser(getDriver().getRequiredConfig(StackatoNode.STACKATO_ADMIN_USER_EMAIL));
+        super.becomeDesiredStackatoRole();
+        // create .stackato_license file so we can log in
+        getDriver().getMachine().copyTo(new StringReader("type: microcloud\n"), ".stackato_license");
     }
     
     public void onMachineReady() {
