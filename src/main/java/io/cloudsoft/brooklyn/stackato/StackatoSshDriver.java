@@ -1,6 +1,7 @@
 package io.cloudsoft.brooklyn.stackato;
 
 import java.io.StringReader;
+import java.util.Arrays;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,33 +69,28 @@ public class StackatoSshDriver extends StartStopSshDriver {
     
     public void customizeImage() {
         log.info("Customizing Stackato machine at "+getMachine()+" for "+node);
+        String password = getRequiredConfig(StackatoNode.STACKATO_PASSWORD);
+        String clusterName = getRequiredConfig(StackatoNode.STACKATO_CLUSTER_NAME);
+        String clusterDomain = getRequiredConfig(StackatoNode.STACKATO_CLUSTER_DOMAIN);
+        
+        String internalIp = ((JcloudsSshMachineLocation)getMachine()).getSubnetHostname();
+        if (internalIp==null) throw new IllegalStateException("Cannot resolve subnet hostname");
+        
         String publicKey = (String)getMachine().getLocationProperty("sshPublicKeyData");
         if (publicKey==null) 
             throw new IllegalStateException("SSH keys required; no public key specified");
         getMachine().copyTo(new StringReader(publicKey), "/tmp/id.pub");
-        String password = getRequiredConfig(StackatoNode.STACKATO_PASSWORD);
-        String internalIp = ((JcloudsSshMachineLocation)getMachine()).getSubnetHostname();
-        if (internalIp==null) throw new IllegalStateException("Cannot resolve subnet hostname");
-        String clusterName = getRequiredConfig(StackatoNode.STACKATO_CLUSTER_NAME);
-        String clusterDomain = getRequiredConfig(StackatoNode.STACKATO_CLUSTER_DOMAIN);
-        
         
         newScript("stackato-customizeImage").
             failOnNonZeroResultCode().
             body.append(
-                    // needed if sudo access isn't enabled by default
-                    "echo stackato | sudo -S echo sudo access granted",
-//                    // setup passwordless sudo -- actually this is a bad idea on some OS's (ubuntu)
-//                    // because the second sudo is disallowed once permissions are changed!
-//                    "sudo chmod u+w /etc/sudoers && "+
-//                    "sudo bash -c 'echo \"stackato ALL=(ALL) NOPASSWD: ALL\" >> /etc/sudoers' && "+
-//                    "sudo chmod u-w /etc/sudoers || exit 1",
+                    // needed if sudo access isn't enabled by default, with password
+                    "echo stackato | sudo -S echo sudo access granted || exit 1",
                     // add key for users root (already done) & stackato
                     "cat /tmp/id.pub >> ~stackato/.ssh/authorized_keys || exit 2",
                     // change stackato passwd
                     "echo \""+password+"\n"+password+"\" | sudo -S passwd stackato || exit 3",
-                    // setup hosts file (TODO hosts file always points to local machine, is that okay?)
-                    // 10.0.0.1 stackato-xyz1 stackato-xyz1.geopaas.org api.stackato-xyz1.geopaas.org >> /etc/hosts
+                    // setup hosts file (hosts file always points to local machine, but that seems okay?)
                     "sudo bash -c 'echo "+internalIp+" "+clusterName+" "+
                             clusterName+"."+clusterDomain+" "+
                             "api."+clusterName+"."+clusterDomain+" "+
@@ -138,7 +134,39 @@ public class StackatoSshDriver extends StartStopSshDriver {
     
     @Override
     public void launch() {
+        node.blockUntilReadyToLaunch();
         rebootAndWait();
     }
 
+    public String getEndpointHostname() {
+        return "api"+"."+
+                getRequiredConfig(StackatoNode.STACKATO_CLUSTER_NAME)+"."+
+                getRequiredConfig(StackatoNode.STACKATO_CLUSTER_DOMAIN);
+    }
+    
+    public void createAdminUser(String usernameEmail, String password) {
+        // http://community.activestate.com/node/8795
+        // but we've already changed the unix password so it cannot
+        String endpoint = getEndpointHostname();
+        int result = execute(Arrays.asList(
+                "curl -k https://"+endpoint+"/stackato/license -d \""+
+                        "email="+usernameEmail+"&"+
+                        "password="+password+"\" > .brooklyn_stackato_user_setup",
+                "grep -i error .brooklyn_stackato_user_setup && exit 80 || echo user created"),
+                "stackato-admin-user");
+        if (result!=0) throw new IllegalStateException("curl to create user failed");
+    }
+
+    public void createLicenseFile() {
+        String endpoint = getEndpointHostname();
+        int result = getMachine().execCommands("stackato-admin-user", Arrays.asList(
+                // fine if already created
+                "cat .stackato_license 2> /dev/null || ( echo '{\"type\":\"microcloud\"' "+
+                        "| curl -k https://"+endpoint+"/stackato/license )",
+                "cat .stackato_license"));
+        if (result!=0) throw new IllegalStateException("curl to create license failed");
+    }
+
+    // curl -k https://api.brooklyn-stackato-hAqiOR9x.geopaas.org/stackato/license -d "email=me@fun.net&password=funfunfun&unix_password=funfunfun"
+    
 }

@@ -1,11 +1,12 @@
 package io.cloudsoft.brooklyn.stackato;
 
-import java.io.StringReader;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.Callable;
 
 import brooklyn.entity.Entity;
 import brooklyn.event.AttributeSensor;
+import brooklyn.location.Location;
 import brooklyn.location.basic.jclouds.JcloudsLocation.JcloudsSshMachineLocation;
 import brooklyn.util.task.BasicTask;
 
@@ -13,7 +14,8 @@ public class StackatoMasterNode extends StackatoNode {
 
     public static final AttributeSensor<String> STACKATO_ENDPOINT = StackatoDeployment.STACKATO_ENDPOINT;
     public static final AttributeSensor<String> MASTER_INTERNAL_IP = StackatoDeployment.MASTER_INTERNAL_IP;
-
+    public static final AttributeSensor<Boolean> MASTER_UP = StackatoDeployment.MASTER_UP;
+    
     public StackatoMasterNode(Entity owner) {
         super(owner);
         
@@ -29,10 +31,7 @@ public class StackatoMasterNode extends StackatoNode {
     }
 
     public void becomeDesiredStackatoRole() {
-        getDriver().createAdminUser(getDriver().getRequiredConfig(StackatoNode.STACKATO_ADMIN_USER_EMAIL));
         super.becomeDesiredStackatoRole();
-        // create .stackato_license file so we can log in
-        getDriver().getMachine().copyTo(new StringReader("type: microcloud\n"), ".stackato_license");
     }
     
     public void onMachineReady() {
@@ -40,4 +39,19 @@ public class StackatoMasterNode extends StackatoNode {
         setAttribute(STACKATO_ENDPOINT, getApiEndpoint());
     }
 
+    public void addLicensedUser() {
+        getDriver().createAdminUser(
+                getDriver().getRequiredConfig(StackatoNode.STACKATO_ADMIN_USER_EMAIL), 
+                getDriver().getRequiredConfig(StackatoNode.STACKATO_PASSWORD));
+        // happens automatically by the above only if unix password is unchanged ("stackato")
+        // which it isn't so do it manually:
+        getDriver().createLicenseFile();
+    }
+
+    @Override
+    public void start(Collection<? extends Location> locations) {
+        super.start(locations);
+        setAttribute(MASTER_UP, true); 
+    }
+    
 }

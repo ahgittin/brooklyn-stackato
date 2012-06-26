@@ -48,11 +48,7 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
     public StackatoNode(Map flags, Entity owner) { 
         super(flags, owner);
         
-        Entity stackatoCluster = owner;
-        while (!(stackatoCluster instanceof StackatoDeployment)) {
-            if (stackatoCluster==null) throw new IllegalStateException(""+this+" is not part of any stackato cluster");
-            stackatoCluster = stackatoCluster.getOwner();
-        }
+        StackatoDeployment stackatoCluster = getStackatoDeployment();
         String masterIp = getConfig(MASTER_IP_ADDRESS);
         addOptionForBecomeIfNotPresent("-m",
                 masterIp!=null ? masterIp :
@@ -60,6 +56,15 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
         addOptionForBecomeIfNotPresent("-e", new BasicTask(new Callable() { public Object call() { 
             return getApiEndpoint(); 
         } }));
+    }
+    
+    protected StackatoDeployment getStackatoDeployment() {
+        Entity stackatoCluster = getOwner();
+        while (!(stackatoCluster instanceof StackatoDeployment)) {
+            if (stackatoCluster==null) throw new IllegalStateException(""+this+" is not part of any stackato cluster");
+            stackatoCluster = stackatoCluster.getOwner();
+        }
+        return (StackatoDeployment) stackatoCluster;
     }
     
     @Override
@@ -245,5 +250,8 @@ public class StackatoNode extends SoftwareProcessEntity implements StackatoConfi
             ), ""+this+" becoming "+roles);
         if (result!=0) throw new IllegalStateException("error "+this+" becoming "+join(roles, " ")+" "+join(opts, " ")+": result code "+result);
     }
-
+    
+    public void blockUntilReadyToLaunch() {
+        // no op by default
+    }
 }
